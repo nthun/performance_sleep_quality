@@ -1,11 +1,33 @@
-install.packages(c("tidyverse", "janitor","psych","lme4"))
+---
+title: "Sleep quality and cognitve performance analysis"
+author: "Tamas Nagy"
+date: "January 21, 2019"
+bibliography: "refs/refs.bib" 
+output: 
+  html_document:
+   toc: true
+   toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+# Aim
+We want to investigate the effect of poor sleep quality on cognitive performance. 
+Two sleep quality questionnaires and several cognitive tests were administered across 
+three studies.  
+
+First, we want to aggregate the sleep quality questionnaires into one 
+sleep quality metric. Then we want to investigate the association while controlling for 
+the potential effect of the separate studies. Subsequently, we want to obtain 
+Bayes Factors, so we can draw conclusions about the probability of null or alternative 
+hypothesis.
+
+
+```{r setup, include=FALSE}
+# install.packages(c("tidyverse", "janitor","psych","lme4"))
 
 library(tidyverse)
 library(lme4)
-
-# Data read
-df_raw <- read_csv2("data/PSQIcikkhez adatok.csv", 
-                    locale = locale(encoding = "WINDOWS-1252"))
 
 # Define variable labels. This is important for making the plots pretty
 variables_needed <- 
@@ -42,16 +64,29 @@ variable_groups <-
           "WCST – perseverative error", "WM and EF indices"
   )
 
+```
+
+```{r data_read, message=FALSE, warning=FALSE}
+df_raw <- read_csv2("data/PSQIcikkhez adatok.csv", 
+                    locale = locale(encoding = "WINDOWS-1252"))
+
 # Process data for ease of use
+# Clean variable names: Remove spaces, accented characters, capitals, make smallcase
+# Translate Hungarian variable names, recode sex
+
 df <-
   df_raw %>% 
-  janitor::clean_names() %>% # Remove spaces, accented characters, capitals
+  janitor::clean_names() %>% 
   rename(sex = nem, age = eletkor, education_yrs = iskolazottsag) %>% 
   mutate(sex = recode(sex, `1` = "Male", `2` = "Female", `0` = "Not specified"))
+```
 
 # Principal component analysis of sleep quality
-# This is required to make one PC that can represent sleep disturbance
 
+We conduct a principal component analysis (PCA) to aggregate the two sleep quality 
+measures into one. 
+
+```{r}
 sleepd_pca <- 
   df %>% 
   select(ais_ossz, psqi_osszpont) %>% 
@@ -64,15 +99,24 @@ sleepd_pca
 df <- 
   df %>% 
   mutate(sleep_disturb = sleepd_pca$scores[,1])
+```
 
-# EDA
+One principal factor with an eigenvalue of `r sleepd_pca$values[1]` was used to represent 
+sleep disturbance.
+
+# Exploraton of important variables
+```{r}
+skimr::skim_with(numeric = list(hist = NULL))
 df %>% 
   select(one_of(variables_needed)) %>% 
   skimr::skim()
+```
 
-## Calculate association of the 
-# First, create LMEM models with the same predictor (sleep disturbance), and various outcome measures. The LMEM contains a random intercept term by study
+# Checking hypotheses
+First, we create several linear mixed-effects models (LMEM) with the same predictor (sleep disturbance), and the cognitive performance metrics as outcomes. The LMEM contains a 
+random intercept term by study to account for the potential differences between studies.
 
+```{r warning=FALSE}
 all_models <- 
   df %>% 
   select(one_of(variables_needed)) %>% 
@@ -84,20 +128,31 @@ all_models <-
 # From the models, we can get the  standardized betas for the slopes and p the values
 # We recalculate the models using restricted likelihood for this, so the estimated parameters will be more accurate
 
-all_models %>% 
+models <- 
+  all_models %>% 
   map(~update(.x, REML = TRUE)) %>% 
   map(~broom::tidy(.)) %>% 
   bind_rows(.id = "outcome_var") %>% 
   filter(!str_detect(term, "(Intercept)|.Residual")) %>% 
-  # Add number of observations by hand and calculate the p statistic baed on t value
+  # Add number of observations by hand and calculate the two-sided p statistic 
+  # based on t value and residual df
   mutate(n = c(rep(231, 11), 225),
          p = 2*pt(q = -abs(statistic), df = n - 1))
 
-## Calculate Bayes Factors (BF01)
+knitr::kable(models)
+```
+
+The LMEMs show no evidences that the cognitive metrics were affected by poor sleep quality.
+
+# Calculate Bayes Factors ($BF_{01}$)
+
+In order to make prediction about the likelihood of the null hypothesis - as compared to
+the alternative hypothesis - we calculated the Bayes Factor [@Wagenmakers2007].
+To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that only included a fixed intercept, and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The $BF_{01}$ were calculated based on @Wagenmakers2007. 
+
+```{r}
 # BF was calculated based on this tutoerial: https://rpubs.com/lindeloev/bayes_factors
 # Calculate BIC for NULL models
-# Maximum Likelihood estimation is used so the models can be compared
-
 null_BIC <-
   df %>%
   select(one_of(variables_needed)) %>% 
@@ -114,12 +169,20 @@ all_models %>%
   map_df(~broom::glance(.),
          .id = "outcome_var") %>%
   left_join(null_BIC, by = "outcome_var") %>%
-  mutate(BF_BIC = exp((BIC - nullBIC)/2))
+  mutate(BF_BIC = exp((BIC - nullBIC)/2)) %>% 
+  select(outcome_var, BF_BIC) %>% 
+  knitr::kable()
 
+```
 
-# Visualize the association for each outcome measure
-library(patchwork)
+As all BFs were over 3, we can conclude that the cognitive performance of the study
+population seems to be unaffected by poor sleep.
 
+# Visualize the association with sleep disturbance for each outcome measure
+
+(I wannted to make this prettier, but there are a few bugs that make it difficult, 
+will update if I find the solution)
+```{r fig.width=9}
 plot_df <-
   df %>%
   # Use pretty variable names
@@ -129,81 +192,19 @@ plot_df <-
   # Add variable group names
   left_join(variable_groups, by = "outcome_var")
 
-# Create a plotting function for all groups separately
-plot_groups <- function(group_name){
-  plot_df %>%
-    filter(group == group_name) %>% 
-    ggplot() +
-    aes(x = `Sleep disturbance`, y = value, color = as.factor(study)) +
-    geom_point(alpha = .5) +
-    geom_smooth(method = "lm", se = FALSE) +
-    facet_grid(group~outcome_var) + 
-    labs(x = NULL, y = NULL) +
-    theme_bw() +
-    theme(legend.position = "none",
-          panel.grid.major = element_blank(), 
-          panel.grid.minor = element_blank(),
-          panel.background = element_blank())
-}
-
-# Put all rows of the plot into a list
-group_plots <- 
-  map(unique(plot_df$group), plot_groups)
-
-# Draw plots and add layout
-reduce(group_plots, `+`) + 
-  plot_layout(widths = c(1,1,2,3), nrow = 4)
-
-group_plots[[1]] +
-group_plots[[2]] +
-group_plots[[3]] +
-group_plots[[4]] + 
-plot_layout(widths = c(3,3,4,2), nrow = 4)
-
-(group_plots[[1]] + plot_spacer()) /
-(group_plots[[2]] + plot_spacer()) /
-group_plots[[3]] /
-(group_plots[[4]] + plot_spacer() + plot_spacer())
-
-
-
-
-# p <- 
-ggplot(mtcars) + 
-  aes(mpg, drat) +
-  geom_point() +
-  facet_grid(gear ~ cyl, drop = TRUE)
-
-
-plots <- 
-  map(unique(mtcars$gear), ~mtcars %>% 
-                             filter(gear == .x) %>% 
-                             ggplot(aes(mpg, drat)) +
-                             geom_point() +
-                             facet_grid(gear~cyl) +
-                             labs(x = NULL, y = NULL))
-
-plots[[1]] + plots[[2]] + plots[[3]] + plot_layout(nrow = 3, widths = c(2,3,3))
-
-(plots[[1]] + plot_spacer()) / plots[[2]] / plots[[3]]
-
-
-
-mtcars %>% distinct(gear, cyl)
-
-library(grid)
-library(egg)
-grid.newpage()
-grid.draw(ggarrange(plots[[1]], plots[[2]], plots[[3]],ncol = 1))
-
-
   ggplot(plot_df) +
     aes(x = `Sleep disturbance`, y = value, color = as.factor(study)) +
     geom_point(alpha = .5) +
     geom_smooth(method = "lm", se = FALSE) +
     facet_wrap(~outcome_var, scales = "free") +
-    scale_color_brewer(palette = "RdYlBu") +
+    scale_color_brewer(palette = "Set1") +
     labs(y = NULL, color = "Study") +
-    theme_bw()
+    theme_bw() +
+    theme(legend.position = "bottom",
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      panel.background = element_blank())
+```
 
+# References
 
