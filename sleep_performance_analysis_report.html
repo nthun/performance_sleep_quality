@@ -338,15 +338,22 @@ sleepd_pca</code></pre>
 ##  with the empirical chi square  23.47  with prob &lt;  NA 
 ## 
 ## Fit based upon off diagonal values = 0.84</code></pre>
-<pre class="r"><code># Add the PC to the original data 
+<pre class="r"><code>bartlett_result &lt;- 
+  df %&gt;% 
+  select(ais_ossz, psqi_osszpont) %&gt;% 
+  cor() %&gt;% 
+  psych::cortest.bartlett(n = 235)
+
+# Add the PC to the original data 
 df &lt;- 
   df %&gt;% 
   mutate(sleep_disturb = sleepd_pca$scores[,1])</code></pre>
-<p>One principal factor with an eigenvalue of 1.5530427 was used to represent sleep disturbance.</p>
+<p>The Bartlett’s test of shericity indicated that the correlation between the scales were adequately large for a PCA, <span class="math inline">\(\chi^2(235)\)</span> = 84.88, p &lt; .0001.</p>
+<p>One principal factor with an eigenvalue of 1.55 was extracted to represent sleep disturbance. The component explained 83.7% of the variance.</p>
 </div>
 <div id="exploraton-of-important-variables" class="section level1">
 <h1>Exploraton of important variables</h1>
-<pre class="r"><code>skimr::skim_with(numeric = list(hist = NULL))
+<pre class="r"><code>skimr::skim_with(numeric = list(hist = NULL)) # Remove spark histograms
 df %&gt;% 
   select(one_of(variables_needed)) %&gt;% 
   skimr::skim()</code></pre>
@@ -411,7 +418,7 @@ models &lt;-
   mutate(n = c(rep(231, 11), 225),
          p = 2*pt(q = -abs(statistic), df = n - 1))</code></pre>
 <pre><code>## singular fit</code></pre>
-<pre class="r"><code>knitr::kable(models)</code></pre>
+<pre class="r"><code>knitr::kable(models, digits = 4)</code></pre>
 <table>
 <thead>
 <tr class="header">
@@ -429,129 +436,130 @@ models &lt;-
 <tr class="odd">
 <td align="left">acc_avg</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">0.0876740</td>
-<td align="right">0.0507664</td>
-<td align="right">1.7270086</td>
+<td align="right">0.0877</td>
+<td align="right">0.0508</td>
+<td align="right">1.7270</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.0855087</td>
+<td align="right">0.0855</td>
 </tr>
 <tr class="even">
 <td align="left">acc_gs</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">0.0933700</td>
-<td align="right">0.0549702</td>
-<td align="right">1.6985558</td>
+<td align="right">0.0934</td>
+<td align="right">0.0550</td>
+<td align="right">1.6986</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.0907552</td>
+<td align="right">0.0908</td>
 </tr>
 <tr class="odd">
 <td align="left">cs_avg</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0179001</td>
-<td align="right">0.0656689</td>
-<td align="right">-0.2725804</td>
+<td align="right">-0.0179</td>
+<td align="right">0.0657</td>
+<td align="right">-0.2726</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.7854204</td>
+<td align="right">0.7854</td>
 </tr>
 <tr class="even">
 <td align="left">highrer_order_acc</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0813499</td>
-<td align="right">0.0645464</td>
-<td align="right">-1.2603331</td>
+<td align="right">-0.0813</td>
+<td align="right">0.0645</td>
+<td align="right">-1.2603</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.2088264</td>
+<td align="right">0.2088</td>
 </tr>
 <tr class="odd">
 <td align="left">highrer_order_rt</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0208752</td>
-<td align="right">0.0650629</td>
-<td align="right">-0.3208460</td>
+<td align="right">-0.0209</td>
+<td align="right">0.0651</td>
+<td align="right">-0.3208</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.7486184</td>
+<td align="right">0.7486</td>
 </tr>
 <tr class="even">
 <td align="left">rt_avg</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0494388</td>
-<td align="right">0.0633825</td>
-<td align="right">-0.7800079</td>
+<td align="right">-0.0494</td>
+<td align="right">0.0634</td>
+<td align="right">-0.7800</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.4361882</td>
+<td align="right">0.4362</td>
 </tr>
 <tr class="odd">
 <td align="left">rt_gs_1min4</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0816006</td>
-<td align="right">0.0646695</td>
-<td align="right">-1.2618109</td>
+<td align="right">-0.0816</td>
+<td align="right">0.0647</td>
+<td align="right">-1.2618</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.2082949</td>
+<td align="right">0.2083</td>
 </tr>
 <tr class="even">
 <td align="left">stat_learn_acc</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0394924</td>
-<td align="right">0.0659964</td>
-<td align="right">-0.5984021</td>
+<td align="right">-0.0395</td>
+<td align="right">0.0660</td>
+<td align="right">-0.5984</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.5501605</td>
+<td align="right">0.5502</td>
 </tr>
 <tr class="odd">
 <td align="left">stat_learn_rt</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0330407</td>
-<td align="right">0.0653498</td>
-<td align="right">-0.5055973</td>
+<td align="right">-0.0330</td>
+<td align="right">0.0653</td>
+<td align="right">-0.5056</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.6136235</td>
+<td align="right">0.6136</td>
 </tr>
 <tr class="even">
 <td align="left">trip_learn_all_acc</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0923815</td>
-<td align="right">0.0616728</td>
-<td align="right">-1.4979302</td>
+<td align="right">-0.0924</td>
+<td align="right">0.0617</td>
+<td align="right">-1.4979</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.1355225</td>
+<td align="right">0.1355</td>
 </tr>
 <tr class="odd">
 <td align="left">trip_learn_all_rt</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">-0.0507304</td>
-<td align="right">0.0654962</td>
-<td align="right">-0.7745548</td>
+<td align="right">-0.0507</td>
+<td align="right">0.0655</td>
+<td align="right">-0.7746</td>
 <td align="left">fixed</td>
 <td align="right">231</td>
-<td align="right">0.4393983</td>
+<td align="right">0.4394</td>
 </tr>
 <tr class="even">
 <td align="left">wcst_pers_error</td>
 <td align="left">scale(sleep_disturb)</td>
-<td align="right">0.0672845</td>
-<td align="right">0.0656492</td>
-<td align="right">1.0249089</td>
+<td align="right">0.0673</td>
+<td align="right">0.0656</td>
+<td align="right">1.0249</td>
 <td align="left">fixed</td>
 <td align="right">225</td>
-<td align="right">0.3065117</td>
+<td align="right">0.3065</td>
 </tr>
 </tbody>
 </table>
+<p>The LMEMs show no evidences that the cognitive metrics were affected by poor sleep quality.</p>
 </div>
 <div id="calculate-bayes-factors-bf_01" class="section level1">
 <h1>Calculate Bayes Factors (<span class="math inline">\(BF_{01}\)</span>)</h1>
-<p>To calculate the BIC derived Bayes Factor, we calculate the BIC for null models that only include a fixed intercept, and a random intercept term by study. Maximum Likelihood estimation is used so the models can be compared. The <span class="math inline">\(BF_{01}\)</span> were calculated based on <span class="citation">Wagenmakers (2007)</span>.</p>
+<p>In order to make prediction about the likelihood of the null hypothesis - as compared to the alternative hypothesis - we calculated the Bayes Factor <span class="citation">(Wagenmakers 2007)</span>. To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that only included a fixed intercept, and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The <span class="math inline">\(BF_{01}\)</span> were calculated based on <span class="citation">Wagenmakers (2007)</span>.</p>
 <pre class="r"><code># BF was calculated based on this tutoerial: https://rpubs.com/lindeloev/bayes_factors
 # Calculate BIC for NULL models
 null_BIC &lt;-
@@ -572,7 +580,7 @@ all_models %&gt;%
   left_join(null_BIC, by = &quot;outcome_var&quot;) %&gt;%
   mutate(BF_BIC = exp((BIC - nullBIC)/2)) %&gt;% 
   select(outcome_var, BF_BIC) %&gt;% 
-  knitr::kable()</code></pre>
+  knitr::kable(digits = 4)</code></pre>
 <table>
 <thead>
 <tr class="header">
@@ -583,54 +591,55 @@ all_models %&gt;%
 <tbody>
 <tr class="odd">
 <td align="left">acc_avg</td>
-<td align="right">3.492386</td>
+<td align="right">3.4924</td>
 </tr>
 <tr class="even">
 <td align="left">acc_gs</td>
-<td align="right">3.677784</td>
+<td align="right">3.6778</td>
 </tr>
 <tr class="odd">
 <td align="left">cs_avg</td>
-<td align="right">14.649592</td>
+<td align="right">14.6496</td>
 </tr>
 <tr class="even">
 <td align="left">highrer_order_acc</td>
-<td align="right">7.002078</td>
+<td align="right">7.0021</td>
 </tr>
 <tr class="odd">
 <td align="left">highrer_order_rt</td>
-<td align="right">14.281938</td>
+<td align="right">14.2819</td>
 </tr>
 <tr class="even">
 <td align="left">rt_avg</td>
-<td align="right">11.472616</td>
+<td align="right">11.4726</td>
 </tr>
 <tr class="odd">
 <td align="left">rt_gs_1min4</td>
-<td align="right">6.609026</td>
+<td align="right">6.6090</td>
 </tr>
 <tr class="even">
 <td align="left">stat_learn_acc</td>
-<td align="right">13.122944</td>
+<td align="right">13.1229</td>
 </tr>
 <tr class="odd">
 <td align="left">stat_learn_rt</td>
-<td align="right">13.277900</td>
+<td align="right">13.2779</td>
 </tr>
 <tr class="even">
 <td align="left">trip_learn_all_acc</td>
-<td align="right">5.091852</td>
+<td align="right">5.0919</td>
 </tr>
 <tr class="odd">
 <td align="left">trip_learn_all_rt</td>
-<td align="right">10.864862</td>
+<td align="right">10.8649</td>
 </tr>
 <tr class="even">
 <td align="left">wcst_pers_error</td>
-<td align="right">8.919470</td>
+<td align="right">8.9195</td>
 </tr>
 </tbody>
 </table>
+<p>As all BFs were over 3, we can conclude that the cognitive performance of the study population seems to be unaffected by poor sleep.</p>
 </div>
 <div id="visualize-the-association-with-sleep-disturbance-for-each-outcome-measure" class="section level1">
 <h1>Visualize the association with sleep disturbance for each outcome measure</h1>

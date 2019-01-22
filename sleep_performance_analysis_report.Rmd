@@ -95,18 +95,28 @@ sleepd_pca <-
 # Show PCA result
 sleepd_pca
 
+bartlett_result <- 
+  df %>% 
+  select(ais_ossz, psqi_osszpont) %>% 
+  cor() %>% 
+  psych::cortest.bartlett(n = 235)
+
 # Add the PC to the original data 
 df <- 
   df %>% 
   mutate(sleep_disturb = sleepd_pca$scores[,1])
 ```
 
-One principal factor with an eigenvalue of `r sleepd_pca$values[1]` was used to represent 
-sleep disturbance.
+The Bartlett's test of shericity indicated that the correlation between the scales were
+adequately large for a PCA, $\chi^2(235)$ = `r round(bartlett_result$chisq, 2)`, p < .0001.
+
+One principal factor with an eigenvalue of `r round(sleepd_pca$values[1], 2)` was extracted to represent 
+sleep disturbance. The component explained `r scales::percent(sleepd_pca$fit.off)` of the 
+variance, and it was named sleep disturbance. 
 
 # Exploraton of important variables
 ```{r}
-skimr::skim_with(numeric = list(hist = NULL))
+skimr::skim_with(numeric = list(hist = NULL)) # Remove spark histograms
 df %>% 
   select(one_of(variables_needed)) %>% 
   skimr::skim()
@@ -139,7 +149,7 @@ models <-
   mutate(n = c(rep(231, 11), 225),
          p = 2*pt(q = -abs(statistic), df = n - 1))
 
-knitr::kable(models)
+knitr::kable(models, digits = 4)
 ```
 
 The LMEMs show no evidences that the cognitive metrics were affected by poor sleep quality.
@@ -171,7 +181,7 @@ all_models %>%
   left_join(null_BIC, by = "outcome_var") %>%
   mutate(BF_BIC = exp((BIC - nullBIC)/2)) %>% 
   select(outcome_var, BF_BIC) %>% 
-  knitr::kable()
+  knitr::kable(digits = 4)
 
 ```
 
