@@ -1,7 +1,9 @@
 install.packages(c("tidyverse", "janitor","psych","lme4"))
 
+
 library(tidyverse)
 library(lme4)
+library(cowplot)
 
 # Data read
 df_raw <- read_csv2("data/PSQIcikkhez adatok.csv", 
@@ -56,6 +58,12 @@ sleepd_pca <-
   df %>% 
   select(ais_ossz, psqi_osszpont) %>% 
   psych::pca(nfactors = 1)
+
+bartlett_result <- 
+  df %>% 
+  select(ais_ossz, psqi_osszpont) %>% 
+  cor() %>% 
+  psych::cortest.bartlett(n = 250)
 
 # Show PCA result
 sleepd_pca
@@ -114,7 +122,7 @@ all_models %>%
   map_df(~broom::glance(.),
          .id = "outcome_var") %>%
   left_join(null_BIC, by = "outcome_var") %>%
-  mutate(BF_BIC = exp((BIC - nullBIC)/2))
+  mutate(BF01 = exp((BIC - nullBIC)/2))
 
 
 # Visualize the association for each outcome measure
@@ -137,7 +145,8 @@ plot_groups <- function(group_name){
     aes(x = `Sleep disturbance`, y = value, color = as.factor(study)) +
     geom_point(alpha = .5) +
     geom_smooth(method = "lm", se = FALSE) +
-    facet_grid(group~outcome_var) + 
+    scale_color_brewer(palette = "Paired") +
+    facet_grid(group~outcome_var, scales = "free_y", switch = "y") + 
     labs(x = NULL, y = NULL) +
     theme_bw() +
     theme(legend.position = "none",
@@ -150,60 +159,74 @@ plot_groups <- function(group_name){
 group_plots <- 
   map(unique(plot_df$group), plot_groups)
 
-# Draw plots and add layout
-reduce(group_plots, `+`) + 
-  plot_layout(widths = c(1,1,2,3), nrow = 4)
+# Plot all panels separately --------------------------------------------------------
 
-group_plots[[1]] +
-group_plots[[2]] +
-group_plots[[3]] +
-group_plots[[4]] + 
-plot_layout(widths = c(3,3,4,2), nrow = 4)
-
-(group_plots[[1]] + plot_spacer()) /
-(group_plots[[2]] + plot_spacer()) /
-group_plots[[3]] /
-(group_plots[[4]] + plot_spacer() + plot_spacer())
-
-
-
-
-# p <- 
-ggplot(mtcars) + 
-  aes(mpg, drat) +
-  geom_point() +
-  facet_grid(gear ~ cyl, drop = TRUE)
-
-
-plots <- 
-  map(unique(mtcars$gear), ~mtcars %>% 
-                             filter(gear == .x) %>% 
-                             ggplot(aes(mpg, drat)) +
-                             geom_point() +
-                             facet_grid(gear~cyl) +
-                             labs(x = NULL, y = NULL))
-
-plots[[1]] + plots[[2]] + plots[[3]] + plot_layout(nrow = 3, widths = c(2,3,3))
-
-(plots[[1]] + plot_spacer()) / plots[[2]] / plots[[3]]
-
-
-
-mtcars %>% distinct(gear, cyl)
-
-library(grid)
-library(egg)
-grid.newpage()
-grid.draw(ggarrange(plots[[1]], plots[[2]], plots[[3]],ncol = 1))
-
-
-  ggplot(plot_df) +
+# Create a plotting function for all groups separately
+plot_single <- function(outcome_name){
+  plot_df %>%
+    filter(outcome_var == outcome_name) %>% 
+    ggplot() +
     aes(x = `Sleep disturbance`, y = value, color = as.factor(study)) +
     geom_point(alpha = .5) +
     geom_smooth(method = "lm", se = FALSE) +
-    facet_wrap(~outcome_var, scales = "free") +
-    scale_color_brewer(palette = "RdYlBu") +
-    labs(y = NULL, color = "Study") +
-    theme_bw()
+    scale_color_brewer(palette = "Paired") +
+    facet_wrap(~outcome_var, scales = "free_y") +
+    labs(title = NULL, x = NULL, y = NULL) +
+    theme_bw() +
+    theme(legend.position = "none",
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank()) +
+    cowplot::panel_border()
+}
+
+# Put all rows of the plot into a list
+single_plots <- 
+  map(unique(plot_df$outcome_var), plot_single)
+
+# Create one plot to get the legend
+plot_1 <-
+  plot_df %>%
+  filter(outcome_var == "RT Triplet learning") %>% 
+  ggplot() +
+  aes(x = `Sleep disturbance`, y = value, color = as.factor(study)) +
+  geom_point(alpha = .5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_color_brewer(palette = "Paired") +
+  labs(color = "Study") +
+  theme(legend.direction = "vertical",
+        legend.justification = "right",
+        legend.box.just = "top", 
+        legend.box.margin = margin())
+
+# Get legend
+plot_legend <- cowplot::get_legend(plot_1)
+
+plot_grid(
+  NULL, NULL, NULL, NULL,
+  single_plots[[1]], single_plots[[4]], single_plots[[6]], NULL,
+  NULL, NULL, NULL, NULL,
+  single_plots[[2]], single_plots[[3]], single_plots[[5]], NULL,
+  NULL, NULL, NULL, NULL,
+  single_plots[[7]], single_plots[[8]], single_plots[[9]], single_plots[[10]],
+  NULL, NULL, NULL, NULL,
+  single_plots[[11]], single_plots[[12]], NULL, plot_legend, 
+  labels = c(
+    "", "", "","",
+    "RT learning indices", "", "", "",
+    "", "", "","",
+    "ACC learning indices", "", "", "",
+    "", "", "","",
+    "General skill indices", "", "", "",
+    "", "", "","",
+    "WM and EF indices"),
+  hjust = -.05,
+  vjust = .05,
+  nrow = 8,
+  rel_heights = c(.15, 1, .15, 1, .15, 1, .15, 1)
+  ) 
+
+
+
 
 

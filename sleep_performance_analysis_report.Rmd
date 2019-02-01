@@ -24,10 +24,11 @@ hypothesis.
 
 
 ```{r setup, include=FALSE}
-# install.packages(c("tidyverse", "janitor","psych","lme4"))
+# install.packages(c("tidyverse", "janitor","psych","lme4", "cowplot"))
 
 library(tidyverse)
 library(lme4)
+library(cowplot)
 
 # Define variable labels. This is important for making the plots pretty
 variables_needed <- 
@@ -179,8 +180,8 @@ all_models %>%
   map_df(~broom::glance(.),
          .id = "outcome_var") %>%
   left_join(null_BIC, by = "outcome_var") %>%
-  mutate(BF_BIC = exp((BIC - nullBIC)/2)) %>% 
-  select(outcome_var, BF_BIC) %>% 
+  mutate(BF01 = exp((BIC - nullBIC)/2)) %>% 
+  select(outcome_var, BF01) %>% 
   knitr::kable(digits = 4)
 
 ```
@@ -190,9 +191,8 @@ population seems to be unaffected by poor sleep.
 
 # Visualize the association with sleep disturbance for each outcome measure
 
-(I wannted to make this prettier, but there are a few bugs that make it difficult, 
-will update if I find the solution)
-```{r fig.width=9}
+```{r fig.height=8, fig.width=12}
+# Create a plot 
 plot_df <-
   df %>%
   # Use pretty variable names
@@ -202,19 +202,72 @@ plot_df <-
   # Add variable group names
   left_join(variable_groups, by = "outcome_var")
 
-  ggplot(plot_df) +
+# Create a plotting function for all groups separately
+plot_single <- function(outcome_name){
+  plot_df %>%
+    filter(outcome_var == outcome_name) %>% 
+    ggplot() +
     aes(x = `Sleep disturbance`, y = value, color = as.factor(study)) +
     geom_point(alpha = .5) +
     geom_smooth(method = "lm", se = FALSE) +
-    facet_wrap(~outcome_var, scales = "free") +
-    scale_color_brewer(palette = "Set1") +
-    labs(y = NULL, color = "Study") +
+    scale_color_brewer(palette = "Paired") +
+    facet_wrap(~outcome_var, scales = "free_y") +
+    labs(title = NULL, x = NULL, y = NULL) +
     theme_bw() +
-    theme(legend.position = "bottom",
-      panel.grid.major = element_blank(), 
-      panel.grid.minor = element_blank(),
-      panel.background = element_blank())
+    theme(legend.position = "none",
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank()) +
+    cowplot::panel_border()
+}
+
+# Put all rows of the plot into a list
+single_plots <- 
+  map(unique(plot_df$outcome_var), plot_single)
+
+# Create one plot to get the legend
+plot_1 <-
+  plot_df %>%
+  filter(outcome_var == "RT Triplet learning") %>% 
+  ggplot() +
+  aes(x = `Sleep disturbance`, y = value, color = as.factor(study)) +
+  geom_point(alpha = .5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_color_brewer(palette = "Paired") +
+  labs(color = "Study") +
+  theme(legend.direction = "vertical",
+        legend.justification = "right",
+        legend.box.just = "top", 
+        legend.box.margin = margin())
+
+# Get legend
+plot_legend <- cowplot::get_legend(plot_1)
+
+# Assemble the plot. 
+# I realize that the code is a bit ugly, but the outcome seems acceptable
+plot_grid(
+  NULL, NULL, NULL, NULL,
+  single_plots[[1]], single_plots[[4]], single_plots[[6]], NULL,
+  NULL, NULL, NULL, NULL,
+  single_plots[[2]], single_plots[[3]], single_plots[[5]], NULL,
+  NULL, NULL, NULL, NULL,
+  single_plots[[7]], single_plots[[8]], single_plots[[9]], single_plots[[10]],
+  NULL, NULL, NULL, NULL,
+  single_plots[[11]], single_plots[[12]], NULL, plot_legend, 
+  labels = c(
+    "", "", "","",
+    "RT learning indices", "", "", "",
+    "", "", "","",
+    "ACC learning indices", "", "", "",
+    "", "", "","",
+    "General skill indices", "", "", "",
+    "", "", "","",
+    "WM and EF indices"),
+  hjust = -.05,
+  vjust = .05,
+  nrow = 8,
+  rel_heights = c(.15, 1, .15, 1, .15, 1, .15, 1)
+  ) 
 ```
 
 # References
-
