@@ -28,7 +28,9 @@ hypothesis.
 
 library(tidyverse)
 library(lme4)
+library(robustlmm)
 library(cowplot)
+library(broom.mixed)
 
 # Define variable labels. This is important for making the plots pretty
 variables_needed <- 
@@ -127,13 +129,17 @@ df %>%
 First, we create several linear mixed-effects models (LMEM) with the same predictor (sleep disturbance), and the cognitive performance metrics as outcomes. The LMEM contains a 
 random intercept term by study to account for the potential differences between studies.
 
+After we ran the models, the residuals did not show normal distribution. Therefore we 
+reran the analysis using a roboust estimation that does not assume normality of residuals 
+@Koller2016.
+
 ```{r warning=FALSE}
 all_models <- 
   df %>% 
   select(one_of(variables_needed)) %>% 
   gather(outcome_var, value, -sleep_disturb, -study) %>% 
   split(.$outcome_var) %>% 
-  map(., ~lmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
+  map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
                data = .x))
 
 # From the models, we can get the  standardized betas for the slopes and p the values
@@ -142,9 +148,9 @@ all_models <-
 models <- 
   all_models %>% 
   map(~update(.x, REML = TRUE)) %>% 
-  map(~broom::tidy(.)) %>% 
+  map(~tidy(.)) %>% 
   bind_rows(.id = "outcome_var") %>% 
-  filter(!str_detect(term, "(Intercept)|.Residual")) %>% 
+  filter(term == "scale(sleep_disturb)") %>% 
   # Add number of observations by hand and calculate the two-sided p statistic 
   # based on t value and residual df
   mutate(n = c(rep(231, 11), 225),
@@ -171,12 +177,17 @@ null_BIC <-
   split(.$outcome_var) %>%
   map_df(., ~lmer(scale(value) ~ 1 + (1|study), REML = FALSE, 
                   data = .x) %>% 
-           broom::glance(.) %>% 
-           select(nullBIC = BIC),
+             glance(.) %>% 
+             select(nullBIC = BIC),
          .id = "outcome_var") 
 
 # Calculate BF01 for all models
-all_models %>% 
+df %>% 
+  select(one_of(variables_needed)) %>% 
+  gather(outcome_var, value, -sleep_disturb, -study) %>% 
+  split(.$outcome_var) %>% 
+  map(., ~lmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
+               data = .x)) %>% 
   map_df(~broom::glance(.),
          .id = "outcome_var") %>%
   left_join(null_BIC, by = "outcome_var") %>%
@@ -235,7 +246,7 @@ plot_1 <-
   geom_smooth(method = "lm", se = FALSE) +
   scale_color_brewer(palette = "Paired") +
   labs(color = "Study") +
-  theme(legend.direction = "vertical",
+  theme(legend.direction = "horizontal",
         legend.justification = "right",
         legend.box.just = "top", 
         legend.box.margin = margin())
@@ -246,28 +257,32 @@ plot_legend <- cowplot::get_legend(plot_1)
 # Assemble the plot. 
 # I realize that the code is a bit ugly, but the outcome seems acceptable
 plot_grid(
-  NULL, NULL, NULL, NULL,
-  single_plots[[1]], single_plots[[4]], single_plots[[6]], NULL,
-  NULL, NULL, NULL, NULL,
-  single_plots[[2]], single_plots[[3]], single_plots[[5]], NULL,
-  NULL, NULL, NULL, NULL,
-  single_plots[[7]], single_plots[[8]], single_plots[[9]], single_plots[[10]],
-  NULL, NULL, NULL, NULL,
-  single_plots[[11]], single_plots[[12]], NULL, plot_legend, 
+  NULL, NULL, plot_legend,
+  single_plots[[1]], single_plots[[4]], single_plots[[6]], 
+  NULL, NULL, NULL, 
+  single_plots[[2]], single_plots[[3]], single_plots[[5]], 
+  NULL, NULL, NULL, 
+  single_plots[[9]], single_plots[[10]],single_plots[[11]], 
+  NULL, NULL, NULL, 
+  single_plots[[7]], single_plots[[8]], single_plots[[12]],
   labels = c(
-    "", "", "","",
-    "RT learning indices", "", "", "",
-    "", "", "","",
-    "ACC learning indices", "", "", "",
-    "", "", "","",
-    "General skill indices", "", "", "",
-    "", "", "","",
-    "WM and EF indices"),
+    "", "", "",
+    "A) RT learning indices", "", "",
+    "", "", "",
+    "B) ACC learning indices", "", "", 
+    "", "", "",
+    "C) General skill indices", "", "D) WM and EF indices",
+    "", "", "",
+    "", "", ""),
   hjust = -.05,
   vjust = .05,
   nrow = 8,
-  rel_heights = c(.15, 1, .15, 1, .15, 1, .15, 1)
-  ) 
+  rel_heights = c(.20, 1, .15, 1, .15, 1, .15, 1)
+) + 
+  geom_segment(y = .74, yend = .74, x = .02, xend = .98, size = 1.1) +
+  geom_segment(y = .49, yend = .49, x = .02, xend = .98, size = 1.1) +
+  geom_segment(y = .02, yend = .49, x = .668, xend = .668, size = 1.1) +
+  NULL
 ```
 
 # References
