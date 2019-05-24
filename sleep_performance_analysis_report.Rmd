@@ -24,8 +24,9 @@ hypothesis.
 
 
 ```{r setup, include=FALSE}
-# install.packages(c("tidyverse", "janitor","psych","lme4", "cowplot"))
+# install.packages(c("tidyverse", "janitor","psych","lme4", "cowplot", "MASS"))
 
+library(MASS)
 library(tidyverse)
 library(lme4)
 library(robustlmm)
@@ -48,8 +49,14 @@ variables_needed <-
     "Counting Span" = "cs_avg",
     "WCST – perseverative error" = "wcst_pers_error",
     "Sleep disturbance" = "sleep_disturb",
+    "Groningen Sleep Quality Scale" = "groningen_ossz",
+    "Athens Insomnia Scale" = "ais_ossz",
+    "Sleep diary" = "diary_psqi_4_f",
+    "Pittsburgh Sleep Quality Index" = "psqi_osszpont",
     "study"
   )
+
+sleep_variables <- c("groningen_ossz", "ais_ossz", "diary_psqi_4_f", "psqi_osszpont")
 
 variable_groups <- 
   tribble(~outcome_var, ~group,
@@ -126,15 +133,14 @@ variance, and it was named sleep disturbance.
 
 ```{r}
 df %>% 
-  select(ais_ossz, psqi_osszpont, sleep_disturb) %>% 
-  rename("Sleep disturbance" = sleep_disturb,
-         "Athens Insomnia Scale" = ais_ossz, 
-         "Pittsburgh Sleep Quality Index" = psqi_osszpont) %>% 
+  select(one_of(sleep_variables), sleep_disturb) %>% 
   gather(measure, value) %>% 
+  mutate(measure = recode(measure, !!!variables_recode)) %>% 
   ggplot() +
   aes(x = value) +
   geom_histogram() +
-  facet_wrap(~measure, scales = "free")
+  facet_wrap(~measure, scales = "free_x") +
+  theme_light()
 ```
 
 
@@ -158,7 +164,7 @@ reran the analysis using a roboust estimation that does not assume normality of 
 ```{r warning=FALSE}
 all_models <- 
   df %>% 
-  select(one_of(variables_needed)) %>% 
+  select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
   gather(outcome_var, value, -sleep_disturb, -study) %>% 
   split(.$outcome_var) %>% 
   map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
@@ -187,7 +193,7 @@ models %>%
   knitr::kable(digits = 4)
 ```
 
-The LMEMs show no evidences that the cognitive metrics were affected by poor sleep quality.
+The LMEMs show no evidence that cognitive performance metrics were affected by poor sleep quality.
 
 # Calculate Bayes Factors ($BF_{01}$)
 
@@ -200,18 +206,18 @@ To calculate the BIC derived Bayes Factor, we calculated the Bayesian Informatio
 # Calculate BIC for NULL models
 null_BIC <-
   df %>%
-  select(one_of(variables_needed)) %>% 
+  select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
   gather(outcome_var, value, -sleep_disturb, -study) %>% 
   split(.$outcome_var) %>%
-  map_df(., ~lmer(scale(value) ~ 1 + (1|study), REML = FALSE, 
+  map_df(., ~lmer(scale(value) ~ 1 + (1|study), 
+                  REML = FALSE, 
                   data = .x) %>% 
              glance(.) %>% 
-             select(nullBIC = BIC),
-         .id = "outcome_var") 
+             select(nullBIC = BIC), .id = "outcome_var") 
 
 # Calculate BF01 for all models
 df %>% 
-  select(one_of(variables_needed)) %>% 
+  select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
   gather(outcome_var, value, -sleep_disturb, -study) %>% 
   split(.$outcome_var) %>% 
   map(., ~lmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
@@ -316,5 +322,156 @@ plot_grid(
   geom_segment(y = .02, yend = .49, x = .668, xend = .668, size = 1.1) +
   NULL
 ```
+
+# Calculating associations between sleep diary answers, GSQI, and the executing functions
+
+We used robust linear regression to model the relationship between sleep diary answers, QSQI score, and the executive functions. We calculated the BF in the previously described way.
+
+```{r}
+study2_long <-
+  df %>% 
+  filter(study == 2) %>%
+  select(one_of(variables_needed), -one_of(sleep_variables), -sleep_disturb, -study,
+         groningen_ossz, diary_psqi_4_f) %>% 
+  gather(outcome_var, out_value, -groningen_ossz, -diary_psqi_4_f, na.rm = TRUE) %>% 
+  gather(predictor_var, pred_value, groningen_ossz, diary_psqi_4_f) %>% 
+  drop_na(pred_value, out_value) %>% 
+  group_nest(outcome_var, predictor_var)
+
+# Get null BICs
+study2_nullBIC <-
+  study2_long %>% 
+  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ 1,
+                                data = .x) %>% 
+                           glance(.) %>% 
+                           select(nullBIC = BIC))) %>% 
+  unnest(model) %>% 
+  select(-data)
+  
+  
+study2_models <-
+  study2_long %>% 
+  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ scale(pred_value),
+                                data = .x)),
+         df = map_int(data, ~nrow(.x))-1)
+
+# Show predictors
+study2_models %>% 
+  mutate(model = map(model, ~tidy(.x))) %>% 
+  unnest(model) %>% 
+  filter(str_detect(term, "scale")) %>% 
+  mutate_at(vars(outcome_var, predictor_var),
+            ~recode(., !!!variables_recode)) %>% 
+  left_join(variable_groups, ., by = "outcome_var") %>% 
+  select(group, everything(), -term) %>% 
+  mutate(p = 2*pt(q = -abs(statistic), df = df)) %>% 
+  arrange(predictor_var, group, outcome_var) %>% 
+  knitr::kable(digits = 4)
+
+```
+
+```{r}
+# Calculate BF
+study2_models %>% 
+  mutate(model = map(model, ~glance(.x))) %>% 
+  unnest(model) %>% 
+  left_join(study2_nullBIC, by = c("outcome_var", "predictor_var")) %>% 
+  mutate(BF01 = exp((BIC - nullBIC)/2) %>% round(4)) %>% 
+  mutate_at(vars(outcome_var, predictor_var),
+            ~recode(., !!!variables_recode)) %>% 
+  left_join(variable_groups, ., by = "outcome_var") %>% 
+  select(group, outcome_var, predictor_var, BF01) %>%
+  arrange(predictor_var, group, outcome_var) %>% 
+  knitr::kable(digits = 4)
+```
+
+
+```{r}
+plot2_df <-
+  study2_long %>% 
+  mutate_at(vars(outcome_var, predictor_var),
+            ~recode(., !!!variables_recode)) %>% 
+  unnest()
+
+# Create a plotting function for all groups separately
+plot_double <- function(outcome_name){
+  plot2_df %>%
+    filter(outcome_var == outcome_name) %>% 
+    mutate_at(vars(outcome_var, predictor_var),
+              ~recode(., !!!variables_recode)) %>% 
+    ggplot() +
+    aes(x = pred_value, y = out_value, color = predictor_var) +
+    geom_point(alpha = .5) +
+    geom_smooth(method = "lm", se = FALSE) +
+    facet_wrap(~outcome_var, scales = "free_y") +
+    labs(title = NULL, x = NULL, y = NULL) +
+    theme_bw() +
+    theme(legend.position = "none",
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank()) +
+    cowplot::panel_border()
+}
+
+# Put all rows of the plot into a list
+double_plots <-
+  plot2_df %>%
+  group_nest(outcome_var, keep = TRUE) %>% 
+  mutate(plot = map(data, ~plot_double(.x$outcome_var))) %>% 
+  pull(plot)
+
+double_plots[[2]]
+
+# Create one plot to get the legend
+plot_2 <-
+  plot2_df %>%
+  filter(outcome_var == "RT Triplet learning") %>% 
+  ggplot() +
+  aes(x = pred_value, y = out_value, color = predictor_var) +
+  geom_point(alpha = .5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  # scale_color_viridis_d() +
+  labs(color = "Predictor") +
+  theme(legend.direction = "horizontal",
+        legend.justification = "right",
+        legend.box.just = "top", 
+        legend.box.margin = margin())
+
+# Get legend
+plot_legend <- cowplot::get_legend(plot_2)
+
+# Assemble the plot. 
+# I realize that the code is a bit ugly, but the outcome seems acceptable
+plot_grid(
+  NULL, plot_legend, NULL, 
+  double_plots[[1]], double_plots[[4]], double_plots[[6]], 
+  NULL, NULL, NULL, 
+  double_plots[[2]], double_plots[[3]], double_plots[[5]], 
+  NULL, NULL, NULL, 
+  double_plots[[9]], double_plots[[10]],double_plots[[11]], 
+  NULL, NULL, NULL, 
+  double_plots[[7]], double_plots[[8]], double_plots[[12]],
+  labels = c(
+    "", "", "",
+    "A) RT learning indices", "", "",
+    "", "", "",
+    "B) ACC learning indices", "", "", 
+    "", "", "",
+    "C) General skill indices", "", "D) WM and EF indices",
+    "", "", "",
+    "", "", ""),
+  hjust = -.05,
+  vjust = .05,
+  nrow = 8,
+  rel_heights = c(.20, 1, .15, 1, .15, 1, .15, 1)
+) + 
+  geom_segment(y = .74, yend = .74, x = .02, xend = .98, size = 1.1) +
+  geom_segment(y = .49, yend = .49, x = .02, xend = .98, size = 1.1) +
+  geom_segment(y = .02, yend = .49, x = .668, xend = .668, size = 1.1) +
+  NULL
+
+```
+
+
 
 # References
