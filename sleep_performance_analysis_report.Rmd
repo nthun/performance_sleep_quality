@@ -166,6 +166,7 @@ all_models <-
   df %>% 
   select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
   gather(outcome_var, value, -sleep_disturb, -study) %>% 
+  drop_na(sleep_disturb, value) %>% 
   split(.$outcome_var) %>% 
   map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
                data = .x))
@@ -181,8 +182,9 @@ models <-
   filter(term == "scale(sleep_disturb)") %>% 
   # Add number of observations by hand and calculate the two-sided p statistic 
   # based on t value and residual df
-  mutate(n = c(rep(231, 11), 225),
-         p = 2*pt(q = -abs(statistic), df = n - 1))
+  mutate(
+         df = c(rep(230, 11), 224),
+         p = 2*pt(q = -abs(statistic), df = df))
 
 models %>% 
   mutate(outcome_var = recode(outcome_var, !!!variables_recode)) %>% 
@@ -419,8 +421,6 @@ double_plots <-
   group_nest(outcome_var, keep = TRUE) %>% 
   mutate(plot = map(data, ~plot_double(.x$outcome_var))) %>% 
   pull(plot)
-
-double_plots[[2]]
 
 # Create one plot to get the legend
 plot_2 <-
