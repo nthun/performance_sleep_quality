@@ -388,7 +388,7 @@ study2_models %>%
 ```
 
 
-```{r}
+```{r fig.height=8, fig.width=12}
 plot2_df <-
   study2_long %>% 
   mutate_at(vars(outcome_var, predictor_var),
