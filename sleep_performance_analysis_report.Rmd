@@ -149,8 +149,10 @@ df %>%
 skimr::skim_with(numeric = list(hist = NULL)) # Remove spark histograms
 
 df %>% 
-  select(one_of(variables_needed)) %>% 
-  skimr::skim()
+  select(variables_needed) %>% 
+  # skimr::skim() %>% 
+  skimr::skim_to_wide() %>% 
+  knitr::kable()
 ```
 
 # Checking hypotheses
@@ -161,7 +163,7 @@ After we ran the models, the residuals did not show normal distribution. Therefo
 reran the analysis using a roboust estimation that does not assume normality of residuals 
 @Koller2016.
 
-```{r warning=FALSE}
+```{r warning=FALSE, cache = TRUE}
 all_models <- 
   df %>% 
   select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
@@ -203,7 +205,7 @@ In order to make prediction about the likelihood of the null hypothesis - as com
 the alternative hypothesis - we calculated the Bayes Factor [@Wagenmakers2007].
 To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that only included a fixed intercept, and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The $BF_{01}$ were calculated based on @Wagenmakers2007. 
 
-```{r}
+```{r cache=TRUE}
 # BF was calculated based on this tutorial: https://rpubs.com/lindeloev/bayes_factors
 # Calculate BIC for NULL models
 null_BIC <-
@@ -329,7 +331,7 @@ plot_grid(
 
 We used robust linear regression to model the relationship between sleep diary answers, QSQI score, and the executive functions. We calculated the BF in the previously described way.
 
-```{r}
+```{r cache=TRUE}
 study2_long <-
   df %>% 
   filter(study == 2) %>%
@@ -444,13 +446,13 @@ plot_legend <- cowplot::get_legend(plot_2)
 # I realize that the code is a bit ugly, but the outcome seems acceptable
 plot_grid(
   NULL, plot_legend, NULL, 
-  double_plots[[1]], double_plots[[4]], double_plots[[6]], 
+  double_plots[[11]], double_plots[[9]], double_plots[[10]], 
   NULL, NULL, NULL, 
-  double_plots[[2]], double_plots[[3]], double_plots[[5]], 
+  double_plots[[4]], double_plots[[2]], double_plots[[3]], 
   NULL, NULL, NULL, 
-  double_plots[[9]], double_plots[[10]],double_plots[[11]], 
+  double_plots[[7]], double_plots[[8]],double_plots[[6]], 
   NULL, NULL, NULL, 
-  double_plots[[7]], double_plots[[8]], double_plots[[12]],
+  double_plots[[5]], double_plots[[1]], double_plots[[12]],
   labels = c(
     "", "", "",
     "A) RT learning indices", "", "",
