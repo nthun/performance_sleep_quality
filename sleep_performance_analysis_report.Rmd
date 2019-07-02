@@ -24,7 +24,7 @@ hypothesis.
 
 
 ```{r setup, include=FALSE}
-# install.packages(c("tidyverse", "janitor","psych","lme4", "cowplot", "MASS"))
+# install.packages(c("tidyverse", "janitor","psych","lmerTest", "robustlmm","cowplot", "MASS", "DT", "MASS"))
 
 library(MASS)
 library(tidyverse)
@@ -32,6 +32,9 @@ library(lme4)
 library(robustlmm)
 library(cowplot)
 library(broom.mixed)
+library(DT)
+
+options(DT.options = list(digits = 4))
 
 # Define variable labels. This is important for making the plots pretty
 variables_needed <- 
@@ -81,7 +84,7 @@ variable_groups <-
 ```
 
 ```{r data_read, message=FALSE, warning=FALSE}
-df_raw <- read_csv2("data/PSQIcikkhez adatok.csv", 
+df_raw <- read_csv2("data/raw_data.csv", 
                     locale = locale(encoding = "WINDOWS-1252"))
 
 # Process data for ease of use
@@ -150,9 +153,11 @@ skimr::skim_with(numeric = list(hist = NULL)) # Remove spark histograms
 
 df %>% 
   select(variables_needed) %>% 
-  # skimr::skim() %>% 
   skimr::skim_to_wide() %>% 
-  knitr::kable()
+  DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv")))
 ```
 
 # Checking hypotheses
@@ -194,7 +199,11 @@ models %>%
   left_join(variable_groups, by = "outcome_var") %>% 
   arrange(group) %>% 
   select(group, outcome_var, everything()) %>% 
-  knitr::kable(digits = 4)
+    DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv"))) %>% 
+  formatRound(columns=c("estimate", "std.error", "statistic","p"), digits = 4)
 ```
 
 The LMEMs show no evidence that cognitive performance metrics were affected by poor sleep quality.
@@ -205,7 +214,7 @@ In order to make prediction about the likelihood of the null hypothesis - as com
 the alternative hypothesis - we calculated the Bayes Factor [@Wagenmakers2007].
 To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that only included a fixed intercept, and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The $BF_{01}$ were calculated based on @Wagenmakers2007. 
 
-```{r cache=TRUE}
+```{r }
 # BF was calculated based on this tutorial: https://rpubs.com/lindeloev/bayes_factors
 # Calculate BIC for NULL models
 null_BIC <-
@@ -235,7 +244,11 @@ df %>%
   left_join(variable_groups, by = "outcome_var") %>% 
   arrange(group) %>% 
   select(group, outcome_var, BF01) %>% 
-  knitr::kable(digits = 4)
+  DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv"))) %>% 
+  formatRound(columns=c("BF01"), digits = 4)
 
 ```
 
@@ -331,7 +344,7 @@ plot_grid(
 
 We used robust linear regression to model the relationship between sleep diary answers, QSQI score, and the executive functions. We calculated the BF in the previously described way.
 
-```{r cache=TRUE}
+```{r }
 study2_long <-
   df %>% 
   filter(study == 2) %>%
@@ -370,7 +383,11 @@ study2_models %>%
   select(group, everything(), -term) %>% 
   mutate(p = 2*pt(q = -abs(statistic), df = df)) %>% 
   arrange(predictor_var, group, outcome_var) %>% 
-  knitr::kable(digits = 4)
+  DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv"))) %>% 
+  formatRound(columns=c("estimate", "std.error", "statistic","p"), digits = 4)
 
 ```
 
@@ -386,7 +403,11 @@ study2_models %>%
   left_join(variable_groups, ., by = "outcome_var") %>% 
   select(group, outcome_var, predictor_var, BF01) %>%
   arrange(predictor_var, group, outcome_var) %>% 
-  knitr::kable(digits = 4)
+  DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv"))) %>% 
+  formatRound(columns=c("BF01"), digits = 4)
 ```
 
 
