@@ -1,10 +1,11 @@
 ---
 title: "Sleep quality and cognitve performance analysis"
 author: "Tamas Nagy"
-date: "January 21, 2019"
+date: "October 22, 2019"
 bibliography: "refs/refs.bib" 
 output: 
   html_document:
+   code_download: true
    toc: true
    toc_float: true
 editor_options: 
@@ -48,18 +49,18 @@ variables_needed <-
     "Average ACC" = "acc_avg",
     "ACC general skill learning" = "acc_gs",
     "RT average" = "rt_avg",
-    "RT general skill learning" = "rt_gs_1_min_4",
+    "RT general skill learning" = "rt_gs_1min4",
     "Counting Span" = "cs_avg",
     "WCST – perseverative error" = "wcst_pers_error",
     "Sleep disturbance" = "sleep_disturb",
     "Groningen Sleep Quality Scale" = "groningen_ossz",
     "Athens Insomnia Scale" = "ais_ossz",
-    "Sleep diary" = "diary_psqi_4_f",
+    "Sleep diary" = "diary_psqi4f",
     "Pittsburgh Sleep Quality Index" = "psqi_osszpont",
     "study"
   )
 
-sleep_variables <- c("groningen_ossz", "ais_ossz", "diary_psqi_4_f", "psqi_osszpont")
+sleep_variables <- c("groningen_ossz", "ais_ossz", "diary_psqi4f", "psqi_osszpont")
 
 variable_groups <- 
   tribble(~outcome_var, ~group,
@@ -77,14 +78,18 @@ variable_groups <-
           "WCST – perseverative error", "WM and EF indices"
   )
 
-  variables_recode <-
-    names(variables_needed) %>% 
-    set_names(variables_needed)
+confounders <- c("sex",
+                 # "own_income",
+                 "meq_all")
+
+variables_recode <-
+  names(variables_needed) %>% 
+  set_names(variables_needed)
 
 ```
 
 ```{r data_read, message=FALSE, warning=FALSE}
-df_raw <- read_csv2("data/raw_data.csv", 
+df_raw <- read_csv2("data/PSQI_data_SES_MEQ.csv", 
                     locale = locale(encoding = "WINDOWS-1252"))
 
 # Process data for ease of use
@@ -93,10 +98,16 @@ df_raw <- read_csv2("data/raw_data.csv",
 
 df <-
   df_raw %>% 
-  set_names(snakecase::to_any_case(names(.), 
-                                   transliterations = "Latin-ASCII")) %>% 
-  rename(sex = nem, age = eletkor, education_yrs = iskolazottsag) %>% 
-  mutate(sex = recode(sex, `1` = "Male", `2` = "Female", `0` = "Not specified"))
+  janitor::clean_names() %>% # Remove spaces, accented characters, capitals
+  rename(id = sorszam, 
+         sex = nem, 
+         age = eletkor, 
+         education_yrs = iskolazottsag,
+         own_income = `sajat_gazdasagi_helyzet`) %>% 
+  mutate(sex = recode(sex, 
+                      `1` = "Male", 
+                      `2` = "Female", 
+                      `0` = NA_character_))
 ```
 
 # Principal component analysis of sleep quality
@@ -171,26 +182,32 @@ reran the analysis using a roboust estimation that does not assume normality of 
 ```{r warning=FALSE, cache = TRUE}
 all_models <- 
   df %>% 
-  select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
-  gather(outcome_var, value, -sleep_disturb, -study) %>% 
+  select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
+  gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
   drop_na(sleep_disturb, value) %>% 
   split(.$outcome_var) %>% 
-  map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
-               data = .x))
+  map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + (1|study), 
+                REML = FALSE,
+                data = .x))
 
 # From the models, we can get the  standardized betas for the slopes and p the values
 # We recalculate the models using restricted likelihood for this, so the estimated parameters will be more accurate
+
+# Get the degrees of freedom (number of observations)
+dfs <- 
+  map_int(all_models, ~length(.x@resp$y)) %>% 
+  tibble(outcome_var = names(.),
+         df =  .)
 
 models <- 
   all_models %>% 
   map(~update(.x, REML = TRUE)) %>% 
   map(~tidy(.)) %>% 
-  bind_rows(.id = "outcome_var") %>% 
+  bind_rows(.id = "outcome_var") %>%
   filter(term == "scale(sleep_disturb)") %>% 
-  # Add number of observations by hand and calculate the two-sided p statistic 
+  left_join(dfs, by = "outcome_var") %>% 
   # based on t value and residual df
-  mutate(
-         df = c(rep(230, 11), 224),
+  mutate(df = df -1,
          p = 2*pt(q = -abs(statistic), df = df))
 
 models %>% 
@@ -219,10 +236,10 @@ To calculate the BIC derived Bayes Factor, we calculated the Bayesian Informatio
 # Calculate BIC for NULL models
 null_BIC <-
   df %>%
-  select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
-  gather(outcome_var, value, -sleep_disturb, -study) %>% 
+  select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
+  gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
   split(.$outcome_var) %>%
-  map_df(., ~lmer(scale(value) ~ 1 + (1|study), 
+  map_df(., ~lmer(scale(value) ~ 1 + scale(meq_all) + sex + (1|study), 
                   REML = FALSE, 
                   data = .x) %>% 
              glance(.) %>% 
@@ -230,10 +247,10 @@ null_BIC <-
 
 # Calculate BF01 for all models
 df %>% 
-  select(one_of(variables_needed), -one_of(sleep_variables)) %>% 
-  gather(outcome_var, value, -sleep_disturb, -study) %>% 
+  select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
+  gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
   split(.$outcome_var) %>% 
-  map(., ~lmer(scale(value) ~ scale(sleep_disturb) + (1|study), REML = FALSE,
+  map(., ~lmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + (1|study), REML = FALSE,
                data = .x)) %>% 
   map_df(~broom::glance(.),
          .id = "outcome_var") %>%
@@ -349,16 +366,17 @@ study2_long <-
   df %>% 
   filter(study == 2) %>%
   select(one_of(variables_needed), -one_of(sleep_variables), -sleep_disturb, -study,
-         groningen_ossz, diary_psqi_4_f) %>% 
-  gather(outcome_var, out_value, -groningen_ossz, -diary_psqi_4_f, na.rm = TRUE) %>% 
-  gather(predictor_var, pred_value, groningen_ossz, diary_psqi_4_f) %>% 
+         groningen_ossz, diary_psqi4f, one_of(confounders)) %>% 
+  gather(outcome_var, out_value, -groningen_ossz, -diary_psqi4f, -one_of(confounders), 
+         na.rm = TRUE) %>% 
+  gather(predictor_var, pred_value, groningen_ossz, diary_psqi4f, -one_of(confounders)) %>% 
   drop_na(pred_value, out_value) %>% 
   group_nest(outcome_var, predictor_var)
 
 # Get null BICs
 study2_nullBIC <-
   study2_long %>% 
-  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ 1,
+  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ 1 + scale(meq_all) + sex,
                                 data = .x) %>% 
                            glance(.) %>% 
                            select(nullBIC = BIC))) %>% 
@@ -368,19 +386,19 @@ study2_nullBIC <-
   
 study2_models <-
   study2_long %>% 
-  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ scale(pred_value),
+  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ scale(pred_value) + scale(meq_all) + sex,
                                 data = .x)),
-         df = map_int(data, ~nrow(.x))-1)
+         df = map_int(data, ~nrow(.x)) - 1)
 
 # Show predictors
 study2_models %>% 
   mutate(model = map(model, ~tidy(.x))) %>% 
   unnest(model) %>% 
-  filter(str_detect(term, "scale")) %>% 
+  filter(str_detect(term, "pred_value")) %>% 
   mutate_at(vars(outcome_var, predictor_var),
             ~recode(., !!!variables_recode)) %>% 
   left_join(variable_groups, ., by = "outcome_var") %>% 
-  select(group, everything(), -term) %>% 
+  select(group, everything(), -term, -data) %>% 
   mutate(p = 2*pt(q = -abs(statistic), df = df)) %>% 
   arrange(predictor_var, group, outcome_var) %>% 
   DT::datatable(
@@ -407,16 +425,16 @@ study2_models %>%
     extensions = 'Buttons', 
     options = list(dom = 'Bfrtip', 
                    buttons = c('excel', "csv"))) %>% 
-  formatRound(columns=c("BF01"), digits = 4)
+  formatRound(columns = c("BF01"), digits = 4)
 ```
 
 
 ```{r fig.height=8, fig.width=12}
 plot2_df <-
   study2_long %>% 
-  mutate_at(vars(outcome_var, predictor_var),
+  mutate_at(.vars = vars(outcome_var, predictor_var),
             ~recode(., !!!variables_recode)) %>% 
-  unnest()
+  unnest(cols = data)
 
 # Create a plotting function for all groups separately
 plot_double <- function(outcome_name){
@@ -498,3 +516,4 @@ plot_grid(
 
 
 # References
+
