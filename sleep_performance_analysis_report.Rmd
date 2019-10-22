@@ -80,6 +80,7 @@ variable_groups <-
 
 confounders <- c("sex",
                  # "own_income",
+                 "age",
                  "meq_all")
 
 variables_recode <-
@@ -186,7 +187,7 @@ all_models <-
   gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
   drop_na(sleep_disturb, value) %>% 
   split(.$outcome_var) %>% 
-  map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + (1|study), 
+  map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + age + (1|study), 
                 REML = FALSE,
                 data = .x))
 
@@ -239,7 +240,7 @@ null_BIC <-
   select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
   gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
   split(.$outcome_var) %>%
-  map_df(., ~lmer(scale(value) ~ 1 + scale(meq_all) + sex + (1|study), 
+  map_df(., ~lmer(scale(value) ~ 1 + scale(meq_all) + sex + age + (1|study), 
                   REML = FALSE, 
                   data = .x) %>% 
              glance(.) %>% 
@@ -250,7 +251,7 @@ df %>%
   select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
   gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
   split(.$outcome_var) %>% 
-  map(., ~lmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + (1|study), REML = FALSE,
+  map(., ~lmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + age + (1|study), REML = FALSE,
                data = .x)) %>% 
   map_df(~broom::glance(.),
          .id = "outcome_var") %>%
@@ -376,7 +377,7 @@ study2_long <-
 # Get null BICs
 study2_nullBIC <-
   study2_long %>% 
-  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ 1 + scale(meq_all) + sex,
+  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ 1 + scale(meq_all) + sex + age,
                                 data = .x) %>% 
                            glance(.) %>% 
                            select(nullBIC = BIC))) %>% 
@@ -386,7 +387,7 @@ study2_nullBIC <-
   
 study2_models <-
   study2_long %>% 
-  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ scale(pred_value) + scale(meq_all) + sex,
+  mutate(model = map(data, ~MASS::rlm(scale(out_value) ~ scale(pred_value) + scale(meq_all) + sex + age,
                                 data = .x)),
          df = map_int(data, ~nrow(.x)) - 1)
 
@@ -457,11 +458,14 @@ plot_double <- function(outcome_name){
 }
 
 # Put all rows of the plot into a list
+
+options(warn=-1)
 double_plots <-
   plot2_df %>%
   group_nest(outcome_var, keep = TRUE) %>% 
   mutate(plot = map(data, ~plot_double(.x$outcome_var))) %>% 
   pull(plot)
+options(warn=0)
 
 # Create one plot to get the legend
 plot_2 <-
