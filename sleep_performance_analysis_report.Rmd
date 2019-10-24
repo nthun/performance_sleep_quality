@@ -17,11 +17,7 @@ We want to investigate the effect of poor sleep quality on cognitive performance
 Two sleep quality questionnaires and several cognitive tests were administered across 
 three studies.  
 
-First, we want to aggregate the sleep quality questionnaires into one 
-sleep quality metric. Then we want to investigate the association while controlling for 
-the potential effect of the separate studies. Subsequently, we want to obtain 
-Bayes Factors, so we can draw conclusions about the probability of null or alternative 
-hypothesis.
+First, we want to aggregate the sleep quality questionnaires into one sleep quality metric. Then we want to investigate the association while controlling for the potential effect of the separate studies, and potential confounders (gender, age, morningness score). Subsequently, we want to obtain Bayes Factors, so we can draw conclusions about the probability of null or alternative hypothesis.
 
 
 ```{r setup, include=FALSE}
@@ -34,6 +30,7 @@ library(robustlmm)
 library(cowplot)
 library(broom.mixed)
 library(DT)
+library(corrr)
 
 options(DT.options = list(digits = 4))
 
@@ -172,6 +169,47 @@ df %>%
                    buttons = c('excel', "csv")))
 ```
 
+
+# Exploraton of association of possible domgraphic confounders
+```{r}
+df_raw %>% 
+  transmute(
+            sex = nem, 
+            age = `életkor`, 
+            education_yrs = `iskolázottság`,
+            family_income = `Család gazdasági helyzete`, 
+            own_income = `Saját gazdasági helyzet`,
+            mother_education = `Anya iskolai végzettsége években`,
+            father_education = `Apa iskolai végzettsége években`,
+            house_rooms = as.numeric(`Hány szobás a ház`),
+            house_area = as.numeric(`Mekkora a ház alapterülete`),
+            number_of_cars = `Hány autója van a családnak`) %>% 
+  correlate(use = "complete.obs", method = "spearman") %>% 
+  fashion() %>%
+  DT::datatable(
+                extensions = 'Buttons', 
+                options = list(dom = 'Bfrtip', 
+                               buttons = c('excel', "csv")))
+```
+
+# Investigation of the association between chronotype with sleep and cognitive performance
+
+```{r}
+df %>% 
+  select(starts_with("meq"), 
+         sleep_disturb, 
+         one_of(variables_needed),
+         -study, -diary_psqi4f, -groningen_ossz) %>% 
+  correlate(use = "complete.obs", method = "spearman") %>% 
+  fashion() %>% 
+  DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv")))
+```
+
+From the demographic confounders, we will use gender and age. From sleep related confounders, morningness (meq_all) was used as a confounder. We didn't include any socioeconomic confounders, because this data was missing for a large number of participants.
+
 # Checking hypotheses
 First, we create several linear mixed-effects models (LMEM) with the same predictor (sleep disturbance), and the cognitive performance metrics as outcomes. The LMEM contains a 
 random intercept term by study to account for the potential differences between studies.
@@ -230,7 +268,7 @@ The LMEMs show no evidence that cognitive performance metrics were affected by p
 
 In order to make prediction about the likelihood of the null hypothesis - as compared to
 the alternative hypothesis - we calculated the Bayes Factor [@Wagenmakers2007].
-To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that only included a fixed intercept, and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The $BF_{01}$ were calculated based on @Wagenmakers2007. 
+To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that included a fixed intercept, and the confounders (gender, age, morningness score), and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The $BF_{01}$ were calculated based on @Wagenmakers2007. 
 
 ```{r }
 # BF was calculated based on this tutorial: https://rpubs.com/lindeloev/bayes_factors
@@ -430,7 +468,7 @@ study2_models %>%
 ```
 
 
-```{r fig.height=8, fig.width=12}
+```{r, warning=FALSE, fig.height=8, fig.width=12}
 plot2_df <-
   study2_long %>% 
   mutate_at(.vars = vars(outcome_var, predictor_var),
@@ -459,13 +497,11 @@ plot_double <- function(outcome_name){
 
 # Put all rows of the plot into a list
 
-options(warn=-1)
 double_plots <-
   plot2_df %>%
   group_nest(outcome_var, keep = TRUE) %>% 
   mutate(plot = map(data, ~plot_double(.x$outcome_var))) %>% 
   pull(plot)
-options(warn=0)
 
 # Create one plot to get the legend
 plot_2 <-
