@@ -1,7 +1,7 @@
 ---
 title: "Sleep quality and cognitve performance analysis"
 author: "Tamas Nagy"
-date: "October 22, 2019"
+date: "October 29, 2019"
 bibliography: "refs/refs.bib" 
 output: 
   html_document:
@@ -21,18 +21,30 @@ First, we want to aggregate the sleep quality questionnaires into one sleep qual
 
 
 ```{r setup, include=FALSE}
-# install.packages(c("tidyverse", "janitor","psych","lmerTest", "robustlmm","cowplot", "MASS", "DT", "MASS"))
+# install.packages(c("tidyverse", "janitor","psych","lme4", "broom.mixed","cowplot", "MASS", "DT", "corrr","boot", "furrr"))
 
 library(MASS)
 library(tidyverse)
 library(lme4)
-library(robustlmm)
-library(cowplot)
 library(broom.mixed)
-library(DT)
-library(corrr)
+library(cowplot)
+library(DT) # For interactive tables
+library(corrr) # For foratted correlation tables
+library(boot) # For bootstrapped confidence intervals
+library(furrr) # FOr parallel processing
 
+# Setting default number of decimals for interactive tables
 options(DT.options = list(digits = 4))
+
+# Setting up parallel processing for calculating bootstap samples
+plan(multisession(workers = availableCores()))  
+
+# Create a function to calculate p values from bootstrapped confidence intervals
+p_from_95_conf <- function(estimate, low, high){
+  se <- (low - high)/3.92
+  z <- estimate/se
+  round(2 * pnorm(-abs(z)), 4)
+}
 
 # Define variable labels. This is important for making the plots pretty
 variables_needed <- 
@@ -76,7 +88,6 @@ variable_groups <-
   )
 
 confounders <- c("sex",
-                 # "own_income",
                  "age",
                  "meq_all")
 
@@ -211,105 +222,84 @@ df %>%
 From the demographic confounders, we will use gender and age. From sleep related confounders, morningness (meq_all) was used as a confounder. We didn't include any socioeconomic confounders, because this data was missing for a large number of participants.
 
 # Checking hypotheses
-First, we create several linear mixed-effects models (LMEM) with the same predictor (sleep disturbance), and the cognitive performance metrics as outcomes. The LMEM contains a 
-random intercept term by study to account for the potential differences between studies.
+First, we create several linear mixed-effects models (LMEM) with the same predictors (ais, psqi, or sleep disturbance), and the cognitive performance metrics as outcomes [@Bates2015a]. The LMEM contains a random intercept term by study to account for the potential differences between studies.
 
-After we ran the models, the residuals did not show normal distribution. Therefore we 
-reran the analysis using a roboust estimation that does not assume normality of residuals 
-@Koller2016.
-
-```{r warning=FALSE, cache = TRUE}
-all_models <- 
-  df %>% 
-  select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
-  gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
-  drop_na(sleep_disturb, value) %>% 
-  split(.$outcome_var) %>% 
-  map(., ~rlmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + age + (1|study), 
-                REML = FALSE,
-                data = .x))
-
-# From the models, we can get the  standardized betas for the slopes and p the values
-# We recalculate the models using restricted likelihood for this, so the estimated parameters will be more accurate
-
-# Get the degrees of freedom (number of observations)
-dfs <- 
-  map_int(all_models, ~length(.x@resp$y)) %>% 
-  tibble(outcome_var = names(.),
-         df =  .)
-
-models <- 
-  all_models %>% 
-  map(~update(.x, REML = TRUE)) %>% 
-  map(~tidy(.)) %>% 
-  bind_rows(.id = "outcome_var") %>%
-  filter(term == "scale(sleep_disturb)") %>% 
-  left_join(dfs, by = "outcome_var") %>% 
-  # based on t value and residual df
-  mutate(df = df -1,
-         p = 2*pt(q = -abs(statistic), df = df))
-
-models %>% 
-  mutate(outcome_var = recode(outcome_var, !!!variables_recode)) %>% 
-  select(-group, -effect, -term) %>% 
-  left_join(variable_groups, by = "outcome_var") %>% 
-  arrange(group) %>% 
-  select(group, outcome_var, everything()) %>% 
-    DT::datatable(
-    extensions = 'Buttons', 
-    options = list(dom = 'Bfrtip', 
-                   buttons = c('excel', "csv"))) %>% 
-  formatRound(columns=c("estimate", "std.error", "statistic","p"), digits = 4)
-```
-
-The LMEMs show no evidence that cognitive performance metrics were affected by poor sleep quality.
-
-# Calculate Bayes Factors ($BF_{01}$)
+After we ran the models, the residuals did not show normal distribution. Therefore we recalculated the estimates using 1000 parametric bootstrap samples [@Canty2019; @Davison1997]. Bootstrapped 95% confidence intervals were obtained, and p values were calculated based on these.
 
 In order to make prediction about the likelihood of the null hypothesis - as compared to
 the alternative hypothesis - we calculated the Bayes Factor [@Wagenmakers2007].
-To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that included a fixed intercept, and the confounders (gender, age, morningness score), and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The $BF_{01}$ were calculated based on @Wagenmakers2007. 
+To calculate the BIC derived Bayes Factor, we calculated the Bayesian Information Criterion (BIC) for null models that included a fixed intercept, and the confounders (gender, age, morningness score), and a random intercept term by study. Maximum Likelihood estimation was used so the models could be compared. The $BF_{01}$ were calculated based on @Wagenmakers2007. As all BFs were over 3, we can conclude that the cognitive performance of the study
+population seems to be unaffected by poor sleep.
 
-```{r }
-# BF was calculated based on this tutorial: https://rpubs.com/lindeloev/bayes_factors
-# Calculate BIC for NULL models
-null_BIC <-
-  df %>%
-  select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
-  gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
-  split(.$outcome_var) %>%
-  map_df(., ~lmer(scale(value) ~ 1 + scale(meq_all) + sex + age + (1|study), 
-                  REML = FALSE, 
-                  data = .x) %>% 
-             glance(.) %>% 
-             select(nullBIC = BIC), .id = "outcome_var") 
+```{r warning=FALSE, cache = TRUE}
+# Reshaping data into long format, so we have a dataset for all combinations of outcome and predictor variables
+study_long <-
+  df %>% 
+  select(one_of(variables_needed), -one_of(sleep_variables), sleep_disturb, study,
+         ais_ossz, psqi_osszpont, one_of(confounders)) %>% 
+  gather(outcome_var, out_value, -ais_ossz, -psqi_osszpont, -sleep_disturb,             -one_of(confounders), -study,
+         na.rm = TRUE) %>% 
+  gather(predictor_var, pred_value, ais_ossz, psqi_osszpont, sleep_disturb, -one_of(confounders), -study) %>% 
+  group_nest(outcome_var, predictor_var)
 
-# Calculate BF01 for all models
-df %>% 
-  select(one_of(variables_needed), -one_of(sleep_variables), one_of(confounders)) %>% 
-  gather(outcome_var, value, -sleep_disturb, -study, -one_of(confounders)) %>% 
-  split(.$outcome_var) %>% 
-  map(., ~lmer(scale(value) ~ scale(sleep_disturb) + scale(meq_all) + sex + age + (1|study), REML = FALSE,
-               data = .x)) %>% 
-  map_df(~broom::glance(.),
-         .id = "outcome_var") %>%
-  left_join(null_BIC, by = "outcome_var") %>%
-  mutate(BF01 = exp((BIC - nullBIC)/2)) %>% 
-  select(outcome_var, BF01) %>% 
-  mutate(outcome_var = recode(outcome_var, !!!variables_recode)) %>% 
-  left_join(variable_groups, by = "outcome_var") %>% 
-  arrange(group) %>% 
-  select(group, outcome_var, BF01) %>% 
+# Calculate random intercept models by study for each outcome variable. Predictor variables are ais or psqi or sleep disturbance. Confounders (gender, age, morningness score) are also added, and null models that contain only the confounders are also created.
+
+study_models <-
+  study_long %>% 
+  mutate(model = map(data, 
+                     ~lmer(scale(out_value) ~ scale(pred_value) + (1|study) + scale(meq_all) + sex + age,
+                            REML = FALSE,
+                            data = .x)),
+         null_model = map(data, 
+                     ~lmer(scale(out_value) ~ 1 + (1|study) + scale(meq_all) + sex + age,
+                            REML = FALSE,
+                            data = .x)),
+         df = map_int(model, df.residual)
+         )
+
+# Calculating the bootstrapped estimates and p values
+
+boot_models <-
+  study_models %>% 
+  mutate(bootstrap = future_map(model, ~bootMer(x = .x, 
+                                                FUN = fixef,
+                                                verbose = FALSE,
+                                                nsim = 1000)),
+         boot_ci = map(bootstrap, ~boot.ci(boot.out = .x, 
+                                           type = "perc", 
+                                           index = 2)),
+         boot_estimate = map_dbl(boot_ci, ~.x$t0),
+         boot_low = map_dbl(boot_ci, ~.x$percent[1, 4]),
+         boot_high = map_dbl(boot_ci, ~.x$percent[1, 5]),
+         boot_p = pmap_dbl(list(boot_estimate, boot_low, boot_high),
+                           ~p_from_95_conf(..1, ..2, ..3))
+  )
+
+
+boot_models %>% 
+  mutate(model = map(model, ~glance(.x)),
+         null_model = map(null_model, ~glance(.x))) %>% 
+  unnest(c(model, null_model), names_sep = "_") %>% 
+  mutate(BF01 = exp((model_BIC - null_model_BIC)/2) %>% round(4)) %>% 
+  mutate_at(vars(outcome_var, predictor_var),
+            ~recode(., !!!variables_recode)) %>%
+  left_join(variable_groups, ., by = "outcome_var") %>% 
+  select(group, outcome_var, predictor_var, 
+         estimate = boot_estimate, 
+         df, 
+         ci_low = boot_low, ci_high = boot_high, 
+         p = boot_p,
+         BF01) %>% 
+  arrange(predictor_var, group, outcome_var) %>% 
   DT::datatable(
     extensions = 'Buttons', 
     options = list(dom = 'Bfrtip', 
                    buttons = c('excel', "csv"))) %>% 
-  formatRound(columns=c("BF01"), digits = 4)
+  formatRound(columns = c("estimate", "ci_low", "ci_high","p","BF01"), digits = 4)
 
 ```
 
-As all BFs were over 3, we can conclude that the cognitive performance of the study
-population seems to be unaffected by poor sleep.
+The LMEMs show no evidence that cognitive performance metrics were affected by poor sleep quality.
 
 # Visualize the association with sleep disturbance for each outcome measure
 
