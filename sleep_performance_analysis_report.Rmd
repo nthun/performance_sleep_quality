@@ -186,7 +186,7 @@ df %>%
 # Exploraton of association of possible domgraphic confounders
 ```{r}
 df_raw %>% 
-  transmute(
+  select(
             sex = nem, 
             age = `életkor`, 
             education_yrs = `iskolázottság`,
@@ -194,9 +194,12 @@ df_raw %>%
             own_income = `Saját gazdasági helyzet`,
             mother_education = `Anya iskolai végzettsége években`,
             father_education = `Apa iskolai végzettsége években`,
-            house_rooms = as.numeric(`Hány szobás a ház`),
-            house_area = as.numeric(`Mekkora a ház alapterülete`),
+            house_rooms = `Hány szobás a ház`,
+            house_area = `Mekkora a ház alapterülete`,
             number_of_cars = `Hány autója van a családnak`) %>% 
+  mutate(house_rooms = as.numeric(house_rooms),
+         house_area = as.numeric(house_area)) %>% 
+  bind_cols(select(df, one_of(variables_needed), -study)) %>% 
   correlate(use = "complete.obs", method = "spearman") %>% 
   fashion() %>%
   DT::datatable(
