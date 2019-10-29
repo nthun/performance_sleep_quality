@@ -15,3 +15,7 @@ robustlmm
 cowplot
 broom.mixed
 DT
+corrr
+boot
+future
+furrr

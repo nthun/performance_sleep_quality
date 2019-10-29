@@ -46,6 +46,8 @@ p_from_95_conf <- function(estimate, low, high){
   round(2 * pnorm(-abs(z)), 4)
 }
 
+set.seed(2019)
+
 # Define variable labels. This is important for making the plots pretty
 variables_needed <- 
   c(
