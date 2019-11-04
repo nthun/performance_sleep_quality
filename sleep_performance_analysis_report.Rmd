@@ -115,10 +115,12 @@ df <-
          age = eletkor, 
          education_yrs = iskolazottsag,
          own_income = `sajat_gazdasagi_helyzet`) %>% 
-  mutate(sex = recode(sex, 
-                      `1` = "Male", 
-                      `2` = "Female", 
-                      `0` = NA_character_))
+  mutate(sex = case_when(study == 3 & sex == 0 ~ "Male",
+                         study == 3 & sex == 1 ~ "Female",
+                         study %in% c(1,2) & sex == 1 ~ "Male",
+                         study %in% c(1,2) & sex == 2 ~ "Female",
+                         TRUE ~ NA_character_)
+         )
 ```
 
 # Principal component analysis of sleep quality
