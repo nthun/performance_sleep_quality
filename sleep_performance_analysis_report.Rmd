@@ -206,32 +206,6 @@ df %>%
                    buttons = c('excel', "csv")))
 ```
 
-
-# Exploraton of association of possible domgraphic confounders
-```{r}
-df_raw %>% 
-  select(
-            sex = nem, 
-            age = `életkor`, 
-            education_yrs = `iskolázottság`,
-            family_income = `Család gazdasági helyzete`, 
-            own_income = `Saját gazdasági helyzet`,
-            mother_education = `Anya iskolai végzettsége években`,
-            father_education = `Apa iskolai végzettsége években`,
-            house_rooms = `Hány szobás a ház`,
-            house_area = `Mekkora a ház alapterülete`,
-            number_of_cars = `Hány autója van a családnak`) %>% 
-  mutate(house_rooms = as.numeric(house_rooms),
-         house_area = as.numeric(house_area)) %>% 
-  bind_cols(select(df, one_of(variables_needed), -study)) %>% 
-  correlate(use = "complete.obs", method = "spearman") %>% 
-  fashion() %>%
-  DT::datatable(
-                extensions = 'Buttons', 
-                options = list(dom = 'Bfrtip', 
-                               buttons = c('excel', "csv")))
-```
-
 # Investigation of the association between chronotype with sleep and cognitive performance
 
 ```{r}
