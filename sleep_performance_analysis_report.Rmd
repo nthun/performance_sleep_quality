@@ -123,6 +123,28 @@ df <-
          )
 ```
 
+# Demographics
+
+```{r}
+df %>% 
+  add_count(study) %>% 
+  mutate(sex_female = sex == "Female") %>% 
+  group_by(study, n) %>% 
+  summarise_at(vars(age, sex_female, education_yrs, meq_all, ais_ossz, psqi_osszpont, groningen_ossz, diary_psqi4f),
+               list(mean = mean, sd = sd), na.rm = TRUE) %>% 
+  mutate(male = (1 - sex_female_mean) * n,
+         female = sex_female_mean * n) %>% 
+  select(-starts_with("sex_female")) %>%
+  select(sort(names(.))) %>% 
+  DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv"))) %>% 
+  formatRound(columns = c("age_mean", "education_yrs_mean", "meq_all_mean", "ais_ossz_mean", "psqi_osszpont_mean","groningen_ossz_mean","diary_psqi4f_mean","age_sd", "education_yrs_sd", "meq_all_sd", "ais_ossz_sd", "psqi_osszpont_sd","groningen_ossz_sd","diary_psqi4f_sd"), 
+              digits = 2)
+```
+
+
 # Principal component analysis of sleep quality
 
 We conduct a principal component analysis (PCA) to aggregate the two sleep quality 
