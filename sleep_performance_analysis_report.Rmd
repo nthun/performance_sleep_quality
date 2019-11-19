@@ -188,7 +188,7 @@ df %>%
   ggplot() +
   aes(x = value) +
   geom_histogram() +
-  facet_wrap(~measure, scales = "free_x") +
+  facet_wrap(~measure, scales = "free") +
   theme_light()
 ```
 
@@ -431,13 +431,16 @@ study2_models %>%
             ~recode(., !!!variables_recode)) %>% 
   left_join(variable_groups, ., by = "outcome_var") %>% 
   select(group, everything(), -term, -data) %>% 
-  mutate(p = 2*pt(q = -abs(statistic), df = df)) %>% 
+  mutate(ci_low = estimate - std.error*2.262,
+         ci_high = estimate + std.error*2.262,
+         p = 2*pt(q = -abs(statistic), 
+                  df = df)) %>% 
   arrange(predictor_var, group, outcome_var) %>% 
   DT::datatable(
     extensions = 'Buttons', 
     options = list(dom = 'Bfrtip', 
                    buttons = c('excel', "csv"))) %>% 
-  formatRound(columns=c("estimate", "std.error", "statistic","p"), digits = 4)
+  formatRound(columns=c("estimate", "std.error", "statistic", "ci_low", "ci_high", "p"), digits = 4)
 
 ```
 
