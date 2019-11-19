@@ -431,8 +431,8 @@ study2_models %>%
             ~recode(., !!!variables_recode)) %>% 
   left_join(variable_groups, ., by = "outcome_var") %>% 
   select(group, everything(), -term, -data) %>% 
-  mutate(ci_low = estimate - std.error*2.262,
-         ci_high = estimate + std.error*2.262,
+  mutate(ci_low = estimate - std.error*1.96,
+         ci_high = estimate + std.error*1.96,
          p = 2*pt(q = -abs(statistic), 
                   df = df)) %>% 
   arrange(predictor_var, group, outcome_var) %>% 
