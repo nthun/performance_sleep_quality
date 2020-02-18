@@ -100,7 +100,7 @@ variables_recode <-
 ```
 
 ```{r data_read, message=FALSE, warning=FALSE}
-df_raw <- read_csv2("data/PSQI_data_SES_MEQ.csv", 
+df_raw <- read_csv2("data/rawdata_hungarian.csv", 
                     locale = locale(encoding = "WINDOWS-1252"))
 
 # Process data for ease of use
